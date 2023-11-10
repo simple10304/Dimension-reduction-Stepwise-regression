@@ -1,0 +1,197 @@
+---
+title: "DAhw02"
+author: "Lin,Pei Chen"
+date: "2023-03-10"
+output: html_document
+---
+Q1
+a.
+```{r}
+library(png)
+path <- "C:/Users/simpl/OneDrive/桌面/111_下學期/資料分析方法/HW02/ORL Faces/ORL Faces"
+
+data <- data.frame(matrix(nrow = 0, ncol = 2576),row.names = character())
+
+for (i in 1:40) {
+  for(j in 1:10){
+    file <- file.path(path, paste0( i,"_",j,".png"))
+    img <- readPNG(file)
+    vec <- as.vector(img)
+    data <- rbind(data, vec)
+  }
+}
+gender<-c(rep(0,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(0,10),rep(1,10),rep(0,10),
+          rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),
+          rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),
+          rep(1,10),rep(0,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10),rep(1,10))
+names(data) <- paste0("Pixel", 1:2576)
+
+data_with_label <- cbind(data, gender)
+```
+
+b.1
+```{r}
+full_model<-lm(gender~.,data_with_label) 
+summary(full_model)
+```
+We can't formulate the multiple regression because there are too many variables.
+We need to do some variable reduction to formulate the regression model.
+
+b.2
+```{r warning=FALSE}
+null_model<-lm(gender~1.,data_with_label)
+summary(null_model)
+
+library(MASS)
+step_model<- stepAIC(null_model,direction = "forward",
+                     scope=list(lower=null_model,upper=full_model),
+                     trace=FALSE)
+summary(step_model)
+chosen_pixels <- coef(step_model)[-1]
+chosen_pixels_array <- array(chosen_pixels, dim = c(46, 56))
+image(1:56, 1:46, t(chosen_pixels_array), col = gray(seq(0, 1, length = 256)), xlab = "Pixel", ylab = "Pixel")
+```
+
+
+
+Q2
+```{r warning=FALSE}
+volcano<- read.csv("C:/Users/simpl/OneDrive/桌面/111_下學期/資料分析方法/HW02/Volcano.csv",header = FALSE)
+get_height<- function(x1,x2){
+  height<-volcano[x2,x1]
+  return(height)
+}
+current_position<-c(87,1)
+max_iter <- 100
+tolerance <- 0.001
+start_point<- c(87,1)
+iter_count <- 0
+current_position<-start_point
+while(iter_count < max_iter){
+  y<-c()
+  datas<-data.frame(x1=numeric(),x2=numeric())
+  x1_sub <- max(current_position[1] - 10, 1):min(current_position[1] + 10, 87)
+  x2_sub <- max(current_position[2] - 10, 1):min(current_position[2] + 10, 61)
+  for (i in x1_sub) {
+    for (j in x2_sub) {
+      height<-get_height(i,j)
+      y<-c(y,height)
+      data<-data.frame(x1=i,x2=j)
+      datas<-rbind(datas,data)
+    }
+  }
+  datas$y<-y
+  model <- lm(y ~ x1 + x2, data = datas)
+  coefficients <- coef(model)[-1]
+  direction <- coefficients / sqrt(sum(coefficients^2))
+  next_point <- current_position + direction
+  if (next_point[1] < 1 || next_point[1] > 87 || next_point[2] < 1 || next_point[2] > 61) {
+    break
+  }
+  
+  distance <- sqrt(sum((next_point - current_position)^2))
+  if (distance < tolerance) {
+    break
+  }
+  current_position <- next_point
+  iter_count <- iter_count + 1
+}
+print(current_position) 
+```
+
+
+Q3
+
+a.
+```{r}
+set.seed(123)
+data<-data.frame(
+  x1 = runif(50000),
+  x2 = runif(50000),
+  y  = runif(50000)
+)
+model<-lm(y~x1+x2,data)
+summary(model)
+print(coef(model))
+```
+b.
+```{r}
+library(ggplot2)
+library(gridExtra)
+gradientDesc <- function(x1,x2, y, learn_rate, conv_threshold, n, max_iter) {
+  m1 <- runif(1, 0, 1)
+  m2<-runif(1,0,1)
+  c <- runif(1, 0, 1)
+  yhat <- m1 * x1 +m2*x2 + c
+  MSE <- sum((y - yhat) ^ 2) / n
+  
+  mse_history <- c(MSE)
+  m1_history <- c(m1)
+  m2_history <- c(m2)
+  c_history <- c(c)
+  
+  converged = F
+  iterations = 0
+  while(converged == F) {
+    m1_new <- m1 - learn_rate * ((1 / n) * (sum((yhat - y) * x1)))
+    m2_new<- m2-learn_rate * ((1 / n) * (sum((yhat - y) * x2)))
+    c_new <- c - learn_rate * ((1 / n) * (sum(yhat - y)))
+    
+    m1_history <- c(m1_history, m1_new)
+    m2_history <- c(m2_history, m2_new)
+    c_history <- c(c_history, c_new)
+    
+    m1 <- m1_new
+    m2 <- m2_new
+    c <- c_new
+    yhat <- m1 * x1 +m2*x2 + c
+    MSE_new <- sum((y - yhat) ^ 2) / n
+    mse_history <- c(mse_history, MSE_new)
+    if(MSE - MSE_new <= conv_threshold) {
+      converged = T
+      return(list(c = c, m1 = m1, m2 = m2, mse_history = mse_history, m1_history = m1_history, m2_history = m2_history))
+    
+    }
+    iterations = iterations + 1
+    if(iterations > max_iter) { 
+      converged = T
+      return(list(c = c, m1 = m1, m2 = m2, mse_history = mse_history, m1_history = m1_history, m2_history = m2_history))
+    
+    }
+  }
+  
+}
+
+results<-gradientDesc(data$x1,data$x2,data$y, 0.005, 0.001, 50000, 50000)
+paste("intercerpt:",results$c,"x1",results$m1,"x2",results$m2)
+```
+Yes,we get the same results in (a)
+
+```{r}
+df <- data.frame(
+  iteration = seq_along(results$mse_history),
+  mse = results$mse_history,
+  m1 = results$m1_history,
+  m2 = results$m2_history
+)
+mse_plot <- ggplot(df, aes(x = iteration, y = mse)) +
+  geom_line() +
+  xlab("Iteration") +
+  ylab("Mean Squared Error")
+
+
+m1_plot <- ggplot(df, aes(x = iteration, y = m1)) +
+  geom_line() +
+  xlab("Iteration") +
+  ylab("x1")
+
+m2_plot <- ggplot(df, aes(x = iteration, y = m2)) +
+  geom_line() +
+  xlab("Iteration") +
+  ylab("x2")
+
+grid.arrange(mse_plot, m1_plot, m2_plot, ncol = 1)
+```
+
+
+
